@@ -46,6 +46,20 @@ export interface ArticlesResponse {
   articles: Article[];
 }
 
+export interface FeedResponse {
+  schemaVersion: string;
+  updatedAt: string;
+  defaultLocale: string;
+  endpoints: {
+    sources: string;
+    articles: string;
+    feed: string;
+  };
+  sourcesUrl?: string;
+  articlesUrl?: string;
+  notes?: string[];
+}
+
 // ─── Gemini Nano Types ─────────────────────────────────────────────────────────
 
 export type GeminiStatus =

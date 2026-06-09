@@ -38,14 +38,16 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('@react-navigation/native-stack', () => ({
   createNativeStackNavigator: () => ({
     Navigator: ({ children }: { children: unknown }) => children,
-    Screen: () => null,
+    Screen: ({ name, component: Component }: { name?: string; component?: React.ComponentType<any> }) =>
+      name === 'Main' && Component ? <Component /> : null,
   }),
 }));
 
 jest.mock('@react-navigation/bottom-tabs', () => ({
   createBottomTabNavigator: () => ({
     Navigator: ({ children }: { children: unknown }) => children,
-    Screen: () => null,
+    Screen: ({ component: Component }: { component?: React.ComponentType<any> }) =>
+      Component ? <Component navigation={{ navigate: jest.fn(), setOptions: jest.fn() }} /> : null,
   }),
 }));
 

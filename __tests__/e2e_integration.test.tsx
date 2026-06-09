@@ -92,7 +92,7 @@ const mockFeed = {
 };
 
 const setupFetchMock = (success = true) => {
-  global.fetch = jest.fn((url: string) => {
+  global.fetch = jest.fn((url: any) => {
     if (!success) {
       return Promise.reject(new Error('Network error'));
     }

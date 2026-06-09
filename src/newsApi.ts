@@ -1,11 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { SourcesResponse, ArticlesResponse, Article, NewsSource } from './types';
+import type { SourcesResponse, ArticlesResponse, FeedResponse, Article, NewsSource } from './types';
 
-const BASE_URL = 'https://mmw1984.github.io/news-api';
+const BASE_URL = 'https://mmw1984.com/news-api';
+const FEED_KEY = 'cached_feed';
 const SOURCES_KEY = 'cached_sources';
 const ARTICLES_KEY = 'cached_articles';
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const CACHE_TIME_KEY = 'cache_time';
+
+function resolveApiUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+  return new URL(pathOrUrl.replace(/^\/+/, ''), `${BASE_URL}/`).toString();
+}
 
 async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T> {
   const timeKey = `${cacheKey}_${CACHE_TIME_KEY}`;
@@ -38,16 +46,25 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T> {
   }
 }
 
+export async function fetchFeed(): Promise<FeedResponse> {
+  return fetchWithCache<FeedResponse>(
+    `${BASE_URL}/data/feed.json`,
+    FEED_KEY,
+  );
+}
+
 export async function fetchSources(): Promise<SourcesResponse> {
+  const feed = await fetchFeed();
   return fetchWithCache<SourcesResponse>(
-    `${BASE_URL}/data/sources.json`,
+    resolveApiUrl(feed.endpoints?.sources ?? feed.sourcesUrl ?? 'data/sources.json'),
     SOURCES_KEY,
   );
 }
 
 export async function fetchArticles(): Promise<ArticlesResponse> {
+  const feed = await fetchFeed();
   return fetchWithCache<ArticlesResponse>(
-    `${BASE_URL}/data/articles.json`,
+    resolveApiUrl(feed.endpoints?.articles ?? feed.articlesUrl ?? 'data/articles.json'),
     ARTICLES_KEY,
   );
 }

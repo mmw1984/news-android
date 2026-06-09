@@ -7,8 +7,10 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.google.common.util.concurrent.FutureCallback
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.mlkit.genai.common.DownloadCallback
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.GenAiException
@@ -16,11 +18,13 @@ import com.google.mlkit.genai.summarization.Summarization
 import com.google.mlkit.genai.summarization.SummarizationRequest
 import com.google.mlkit.genai.summarization.Summarizer
 import com.google.mlkit.genai.summarization.SummarizerOptions
+import com.google.mlkit.genai.summarization.SummarizationResult
 
 class GeminiNanoModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var summarizer: Summarizer? = null
+    private var lastDownloadBytesToDownload: Long = 0L
 
     override fun getName(): String {
         return "GeminiNano"
@@ -42,20 +46,26 @@ class GeminiNanoModule(reactContext: ReactApplicationContext) : ReactContextBase
         mainHandler.post {
             try {
                 val client = getSummarizerInstance()
-                client.checkFeatureStatus()
-                    .addOnSuccessListener { status ->
-                        val statusStr = when (status) {
-                            FeatureStatus.AVAILABLE -> "AVAILABLE"
-                            FeatureStatus.DOWNLOADABLE -> "DOWNLOADABLE"
-                            FeatureStatus.DOWNLOADING -> "DOWNLOADING"
-                            FeatureStatus.UNAVAILABLE -> "UNAVAILABLE"
-                            else -> "UNKNOWN"
+                Futures.addCallback(
+                    client.checkFeatureStatus(),
+                    object : FutureCallback<Int> {
+                        override fun onSuccess(status: Int) {
+                            val statusStr = when (status) {
+                                FeatureStatus.AVAILABLE -> "AVAILABLE"
+                                FeatureStatus.DOWNLOADABLE -> "DOWNLOADABLE"
+                                FeatureStatus.DOWNLOADING -> "DOWNLOADING"
+                                FeatureStatus.UNAVAILABLE -> "UNAVAILABLE"
+                                else -> "UNKNOWN"
+                            }
+                            promise.resolve(statusStr)
                         }
-                        promise.resolve(statusStr)
-                    }
-                    .addOnFailureListener { e ->
-                        promise.reject("CHECK_STATUS_FAILED", e.message, e)
-                    }
+
+                        override fun onFailure(t: Throwable) {
+                            promise.reject("CHECK_STATUS_FAILED", t.message, t)
+                        }
+                    },
+                    MoreExecutors.directExecutor()
+                )
             } catch (e: Exception) {
                 promise.resolve("UNAVAILABLE")
             }
@@ -69,19 +79,26 @@ class GeminiNanoModule(reactContext: ReactApplicationContext) : ReactContextBase
                 val client = getSummarizerInstance()
                 client.downloadFeature(object : DownloadCallback {
                     override fun onDownloadStarted(bytesToDownload: Long) {
+                        lastDownloadBytesToDownload = bytesToDownload
                         sendDownloadEvent("onDownloadStarted", bytesToDownload, 0)
                     }
 
                     override fun onDownloadProgress(totalBytesDownloaded: Long) {
-                        sendDownloadEvent("onDownloadProgress", 0, totalBytesDownloaded)
+                        sendDownloadEvent(
+                            "onDownloadProgress",
+                            lastDownloadBytesToDownload,
+                            totalBytesDownloaded
+                        )
                     }
 
                     override fun onDownloadCompleted() {
+                        lastDownloadBytesToDownload = 0L
                         sendDownloadEvent("onDownloadCompleted", 0, 0)
                         promise.resolve(null)
                     }
 
                     override fun onDownloadFailed(e: GenAiException) {
+                        lastDownloadBytesToDownload = 0L
                         sendDownloadEvent("onDownloadFailed", 0, 0)
                         promise.reject("DOWNLOAD_FAILED", e.message, e)
                     }
@@ -98,13 +115,19 @@ class GeminiNanoModule(reactContext: ReactApplicationContext) : ReactContextBase
             try {
                 val client = getSummarizerInstance()
                 val request = SummarizationRequest.builder(text).build()
-                client.runInference(request)
-                    .addOnSuccessListener { result ->
-                        promise.resolve(result.summary)
-                    }
-                    .addOnFailureListener { e ->
-                        promise.reject("SUMMARIZE_FAILED", e.message, e)
-                    }
+                Futures.addCallback(
+                    client.runInference(request),
+                    object : FutureCallback<SummarizationResult> {
+                        override fun onSuccess(result: SummarizationResult) {
+                            promise.resolve(result.getSummary())
+                        }
+
+                        override fun onFailure(t: Throwable) {
+                            promise.reject("SUMMARIZE_FAILED", t.message, t)
+                        }
+                    },
+                    MoreExecutors.directExecutor()
+                )
             } catch (e: Exception) {
                 promise.reject("SUMMARIZE_FAILED", e.message, e)
             }
