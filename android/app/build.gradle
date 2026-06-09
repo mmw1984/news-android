@@ -116,4 +116,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Google ML Kit GenAI APIs (Gemini Nano)
+    implementation("com.google.mlkit:genai-summarization:1.0.0-beta1")
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
 }
